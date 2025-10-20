@@ -6,6 +6,7 @@ import ReceiveCard from './ReceiveCard';
 import SendCard from './SendCard';
 import TransactionList from './TransactionList';
 import ExportKeyCard from './ExportKeyCard';
+import ManualSendCard from './ManualSendCard';
 
 export default function WalletDashboard() {
   const { user, logout } = useAuth();
@@ -68,18 +69,18 @@ export default function WalletDashboard() {
 
             {/* Tab navigation */}
             <div className="mt-8 border-b-2 border-gray-200">
-              <nav className="flex space-x-8">
-                {['balance', 'receive', 'send', 'history', 'export'].map((tab) => (
+              <nav className="flex space-x-6 overflow-x-auto">
+                {['balance', 'receive', 'send', 'manual', 'history', 'export'].map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
-                    className={`py-2 px-1 font-medium text-sm capitalize transition-all
+                    className={`py-2 px-1 font-medium text-sm capitalize transition-all whitespace-nowrap
                       ${activeTab === tab
                         ? 'border-b-2 border-black text-black -mb-[2px]'
                         : 'text-gray-500 hover:text-black'
                       }`}
                   >
-                    {tab === 'export' ? '🔑 Export Key' : tab}
+                    {tab === 'export' ? '🔑 Key' : tab === 'manual' ? '🚀 Quick Send' : tab}
                   </button>
                 ))}
               </nav>
@@ -104,6 +105,10 @@ export default function WalletDashboard() {
 
               {activeTab === 'send' && (
                 <SendCard userId={user.userId} balance={balance} />
+              )}
+
+              {activeTab === 'manual' && (
+                <ManualSendCard userId={user.userId} walletAddress={wallet.tAddr} />
               )}
 
               {activeTab === 'history' && (

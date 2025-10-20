@@ -268,6 +268,76 @@ router.get('/balance/:address', async (req, res, next) => {
   }
 });
 
+// GET /api/wallet/get-utxos-from-txid/:txid/:address - Get UTXOs from a specific transaction
+router.get('/wallet/get-utxos-from-txid/:txid/:address', async (req, res, next) => {
+  try {
+    const { txid, address } = req.params;
+    
+    console.log('[get-utxos-from-txid] Fetching UTXOs:', { txid, address });
+    
+    // Try multiple APIs to get transaction data
+    const apis = [
+      `https://api.zcha.in/v2/mainnet/transactions/${txid}`,
+      `https://zcashblockexplorer.com/api/tx/${txid}`,
+      `https://explorer.zcha.in/api/v1/mainnet/tx/${txid}`
+    ];
+    
+    let txData = null;
+    
+    for (const apiUrl of apis) {
+      try {
+        const response = await fetch(apiUrl, { timeout: 10000 });
+        if (response.ok) {
+          txData = await response.json();
+          if (txData) {
+            console.log('[get-utxos-from-txid] Got data from:', apiUrl);
+            break;
+          }
+        }
+      } catch (e) {
+        console.log('[get-utxos-from-txid] Failed:', apiUrl, e.message);
+        continue;
+      }
+    }
+    
+    if (!txData) {
+      return res.status(404).json({ 
+        error: 'Transaction not found in any explorer',
+        suggestion: 'Please provide UTXO manually using /api/wallet/send-manual'
+      });
+    }
+    
+    // Extract UTXOs for this address
+    const utxos = [];
+    if (txData.outputs || txData.vout) {
+      const outputs = txData.outputs || txData.vout;
+      outputs.forEach((output, index) => {
+        const outputAddress = output.address || output.scriptPubKey?.addresses?.[0];
+        if (outputAddress === address) {
+          utxos.push({
+            txid: txid,
+            vout: index,
+            value: output.value || output.satoshis || Math.floor(output.valueZat || 0),
+            address: address
+          });
+        }
+      });
+    }
+    
+    res.json({
+      success: true,
+      txid,
+      address,
+      utxos,
+      message: utxos.length > 0 ? `Found ${utxos.length} UTXO(s)` : 'No UTXOs found for this address in this transaction'
+    });
+    
+  } catch (error) {
+    console.error('[get-utxos-from-txid] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // POST /api/wallet/send-manual - Send ZEC using manually provided UTXO
 router.post('/wallet/send-manual', txLimiter, async (req, res, next) => {
   try {
