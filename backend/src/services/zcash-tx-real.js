@@ -8,9 +8,37 @@ import * as ecc from 'tiny-secp256k1';
 import { ECPairFactory } from 'ecpair';
 import crypto from 'crypto';
 import bs58check from 'bs58check';
+import { bech32 } from 'bech32';
 import https from 'https';
 
 const ECPair = ECPairFactory(ecc);
+
+/**
+ * Decode Zcash address (supports t1, t3, and tex1)
+ */
+function decodeZcashAddress(address) {
+  // Check if it's a bech32 address (tex1)
+  if (address.startsWith('tex1')) {
+    try {
+      const decoded = bech32.decode(address);
+      const data = bech32.fromWords(decoded.words);
+      // For tex1 (transparent bech32), data is the pubkey hash
+      return Buffer.from(data);
+    } catch (e) {
+      console.error('[decodeZcashAddress] Bech32 decode error:', e);
+      throw new Error('Invalid tex1 address');
+    }
+  }
+  
+  // Otherwise try base58check (t1, t3)
+  try {
+    const decoded = bs58check.decode(address);
+    return decoded.slice(2); // Remove version bytes
+  } catch (e) {
+    console.error('[decodeZcashAddress] Base58 decode error:', e);
+    throw new Error('Invalid address format');
+  }
+}
 
 // Zcash mainnet network parameters (similar to Bitcoin but different prefixes)
 const zcashNetwork = {
@@ -258,8 +286,7 @@ export async function sendZcashManual(userId, toAddress, amountSats, manualUTXOs
   }
   
   // Decode toAddress to get script
-  const toDecoded = bs58check.decode(toAddress);
-  const toPubKeyHash = toDecoded.slice(2); // Remove prefix
+  const toPubKeyHash = decodeZcashAddress(toAddress);
   
   // Add output to recipient
   psbt.addOutput({
@@ -275,8 +302,8 @@ export async function sendZcashManual(userId, toAddress, amountSats, manualUTXOs
   
   // Add change output if significant
   if (change > 10000) { // Only if change is more than 0.0001 ZEC
-    const fromDecoded = bs58check.decode(fromAddress);
-    const fromPubKeyHash = fromDecoded.slice(2);
+    const fromPubKeyHash = decodeZcashAddress(fromAddress);
+    const fromPubKeyHash = decodeZcashAddress(fromAddress);
     
     psbt.addOutput({
       script: bitcoin.script.compile([
@@ -373,8 +400,8 @@ export async function sendZcash(userId, toAddress, amountSats) {
   }
   
   // Decode toAddress to get script
-  const toDecoded = bs58check.decode(toAddress);
-  const toPubKeyHash = toDecoded.slice(2); // Remove prefix
+  const toPubKeyHash = decodeZcashAddress(toAddress);
+  const toPubKeyHash = decodeZcashAddress(toAddress);
   
   // Add output to recipient
   psbt.addOutput({
@@ -390,8 +417,8 @@ export async function sendZcash(userId, toAddress, amountSats) {
   
   // Add change output if significant
   if (change > 10000) { // Only if change is more than 0.0001 ZEC
-    const fromDecoded = bs58check.decode(fromAddress);
-    const fromPubKeyHash = fromDecoded.slice(2);
+    const fromPubKeyHash = decodeZcashAddress(fromAddress);
+    const fromPubKeyHash = decodeZcashAddress(fromAddress);
     
     psbt.addOutput({
       script: bitcoin.script.compile([
