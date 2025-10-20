@@ -3,6 +3,7 @@ import { txLimiter } from '../middleware/security.js';
 import { pool } from '../models/db.js';
 import { getLatestBlock, submitTransaction, getTransaction, getAddressBalance } from '../services/bridge-client.js';
 import { generateWalletAddresses, validateTAddress } from '../services/address-generator.js';
+import { exportPrivateKey, getBalance as getSimpleBalance } from '../services/zcash-simple.js';
 
 const router = express.Router();
 
@@ -261,6 +262,48 @@ router.get('/balance/:address', async (req, res, next) => {
     res.json(balanceInfo);
   } catch (error) {
     console.error('Error fetching balance:', error);
+    next(error);
+  }
+});
+
+// POST /api/wallet/export-key - Export private key for recovery
+router.post('/wallet/export-key', async (req, res, next) => {
+  try {
+    const { userId, confirmation } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'Missing required field: userId' });
+    }
+
+    // Security confirmation
+    if (confirmation !== 'I_UNDERSTAND_THIS_IS_MY_PRIVATE_KEY') {
+      return res.status(400).json({ 
+        error: 'You must confirm you understand this exports your private key',
+        requiredConfirmation: 'I_UNDERSTAND_THIS_IS_MY_PRIVATE_KEY'
+      });
+    }
+
+    const keyData = exportPrivateKey(userId);
+    
+    res.json({
+      success: true,
+      ...keyData,
+      warning: 'NEVER share this private key with anyone. Anyone with this key can spend your funds.'
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/wallet/balance-simple/:address - Get balance using external API
+router.get('/wallet/balance-simple/:address', async (req, res, next) => {
+  try {
+    const { address } = req.params;
+    
+    const balanceData = await getSimpleBalance(address);
+    
+    res.json(balanceData);
+  } catch (error) {
     next(error);
   }
 });

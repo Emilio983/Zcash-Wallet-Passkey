@@ -5,6 +5,7 @@ import BalanceCard from './BalanceCard';
 import ReceiveCard from './ReceiveCard';
 import SendCard from './SendCard';
 import TransactionList from './TransactionList';
+import ExportKeyCard from './ExportKeyCard';
 
 export default function WalletDashboard() {
   const { user, logout } = useAuth();
@@ -68,7 +69,7 @@ export default function WalletDashboard() {
             {/* Tab navigation */}
             <div className="mt-8 border-b-2 border-gray-200">
               <nav className="flex space-x-8">
-                {['balance', 'receive', 'send', 'history'].map((tab) => (
+                {['balance', 'receive', 'send', 'history', 'export'].map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
@@ -78,7 +79,7 @@ export default function WalletDashboard() {
                         : 'text-gray-500 hover:text-black'
                       }`}
                   >
-                    {tab}
+                    {tab === 'export' ? '🔑 Export Key' : tab}
                   </button>
                 ))}
               </nav>
@@ -90,6 +91,9 @@ export default function WalletDashboard() {
                 <div className="text-center py-12">
                   <p className="text-sm text-gray-600">
                     Your balance is displayed above. Use the tabs to receive or send ZEC.
+                  </p>
+                  <p className="text-xs text-yellow-600 mt-4">
+                    ⚠️ Note: To send funds, you need to export your private key and import it into a full Zcash wallet like Ywallet or Zecwallet.
                   </p>
                 </div>
               )}
@@ -104,6 +108,10 @@ export default function WalletDashboard() {
 
               {activeTab === 'history' && (
                 <TransactionList userId={user.userId} />
+              )}
+
+              {activeTab === 'export' && (
+                <ExportKeyCard userId={user.userId} />
               )}
             </div>
           </>
