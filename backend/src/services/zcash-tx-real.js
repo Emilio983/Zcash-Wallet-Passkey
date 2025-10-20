@@ -303,7 +303,6 @@ export async function sendZcashManual(userId, toAddress, amountSats, manualUTXOs
   // Add change output if significant
   if (change > 10000) { // Only if change is more than 0.0001 ZEC
     const fromPubKeyHash = decodeZcashAddress(fromAddress);
-    const fromPubKeyHash = decodeZcashAddress(fromAddress);
     
     psbt.addOutput({
       script: bitcoin.script.compile([
@@ -401,7 +400,6 @@ export async function sendZcash(userId, toAddress, amountSats) {
   
   // Decode toAddress to get script
   const toPubKeyHash = decodeZcashAddress(toAddress);
-  const toPubKeyHash = decodeZcashAddress(toAddress);
   
   // Add output to recipient
   psbt.addOutput({
@@ -417,7 +415,6 @@ export async function sendZcash(userId, toAddress, amountSats) {
   
   // Add change output if significant
   if (change > 10000) { // Only if change is more than 0.0001 ZEC
-    const fromPubKeyHash = decodeZcashAddress(fromAddress);
     const fromPubKeyHash = decodeZcashAddress(fromAddress);
     
     psbt.addOutput({
