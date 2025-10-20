@@ -268,6 +268,78 @@ router.get('/balance/:address', async (req, res, next) => {
   }
 });
 
+// POST /api/wallet/send-manual - Send ZEC using manually provided UTXO
+router.post('/wallet/send-manual', txLimiter, async (req, res, next) => {
+  try {
+    const { userId, toAddress, amountZEC, utxos } = req.body;
+
+    if (!userId || !toAddress || !amountZEC) {
+      return res.status(400).json({ error: 'Missing required fields: userId, toAddress, amountZEC' });
+    }
+
+    if (!utxos || !Array.isArray(utxos) || utxos.length === 0) {
+      return res.status(400).json({ 
+        error: 'Missing UTXOs. Please provide: [{ txid: "...", vout: 0, value: 3300000 }]',
+        example: {
+          utxos: [
+            { txid: "your_binance_transaction_id", vout: 0, value: 3300000 }
+          ]
+        }
+      });
+    }
+
+    // Convert ZEC to satoshis
+    const amountSats = Math.floor(parseFloat(amountZEC) * 100000000);
+    
+    if (isNaN(amountSats) || amountSats <= 0) {
+      return res.status(400).json({ error: 'Invalid amount' });
+    }
+
+    console.log('[send-manual] Sending with manual UTXOs:', {
+      userId: userId.substring(0, 8) + '...',
+      toAddress,
+      amountZEC,
+      amountSats,
+      utxosProvided: utxos.length
+    });
+
+    // Import the manual send function
+    const { sendZcashManual } = await import('../services/zcash-tx-real.js');
+    
+    // Send the transaction
+    const result = await sendZcashManual(userId, toAddress, amountSats, utxos);
+    
+    if (result.success) {
+      // Log to database
+      try {
+        await pool.query(
+          `INSERT INTO tx_log (user_id, txid, direction, amount_zats, to_addr, status)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [userId, result.txid, 'outgoing', amountSats, toAddress, 'confirmed']
+        );
+      } catch (dbError) {
+        console.error('[send-manual] DB logging error:', dbError);
+      }
+      
+      res.json({
+        success: true,
+        txid: result.txid,
+        message: 'Transaction successfully broadcast!',
+        explorer: `https://explorer.zcha.in/transactions/${result.txid}`
+      });
+    } else {
+      throw new Error('Transaction broadcast failed');
+    }
+    
+  } catch (error) {
+    console.error('[send-manual] Error:', error);
+    res.status(500).json({ 
+      error: error.message,
+      details: 'Failed to send transaction'
+    });
+  }
+});
+
 // POST /api/wallet/send-real - Send ZEC using real transaction building
 router.post('/wallet/send-real', txLimiter, async (req, res, next) => {
   try {

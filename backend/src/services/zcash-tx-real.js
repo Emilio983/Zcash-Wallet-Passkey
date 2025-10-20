@@ -200,6 +200,117 @@ async function broadcastRawTransaction(rawTxHex) {
 }
 
 /**
+ * Build, sign and broadcast a Zcash transaction using manual UTXOs
+ */
+export async function sendZcashManual(userId, toAddress, amountSats, manualUTXOs) {
+  console.log('[sendZcashManual] Starting transaction:', { userId, toAddress, amountSats, utxos: manualUTXOs.length });
+  
+  // Get private key and address
+  const privateKeyBuffer = derivePrivateKey(userId);
+  const keyPair = ECPair.fromPrivateKey(privateKeyBuffer);
+  const fromAddress = getAddressFromUserId(userId);
+  
+  console.log('[sendZcashManual] From address:', fromAddress);
+  
+  // Use provided UTXOs
+  const utxos = manualUTXOs;
+  
+  // Calculate fees (10 sats/byte is standard)
+  const estimatedSize = 250 + (utxos.length * 180); // Rough estimate
+  const fee = Math.ceil(estimatedSize * 10);
+  
+  // Select UTXOs
+  const totalNeeded = amountSats + fee;
+  let selectedUTXOs = [];
+  let totalInput = 0;
+  
+  for (const utxo of utxos) {
+    selectedUTXOs.push(utxo);
+    totalInput += utxo.value;
+    if (totalInput >= totalNeeded) break;
+  }
+  
+  if (totalInput < totalNeeded) {
+    throw new Error(`Insufficient funds. Need ${totalNeeded} sats (${amountSats} + ${fee} fee), have ${totalInput} sats`);
+  }
+  
+  const change = totalInput - amountSats - fee;
+  
+  console.log('[sendZcashManual] Transaction breakdown:', {
+    totalInput,
+    amountSats,
+    fee,
+    change,
+    utxosUsed: selectedUTXOs.length
+  });
+  
+  // Create transaction builder
+  const psbt = new bitcoin.Psbt();
+  
+  // Add inputs
+  for (const utxo of selectedUTXOs) {
+    psbt.addInput({
+      hash: utxo.txid,
+      index: utxo.vout,
+      // For now, we'll use a simplified approach
+      // In production, you'd need the actual previous output script
+    });
+  }
+  
+  // Decode toAddress to get script
+  const toDecoded = bs58check.decode(toAddress);
+  const toPubKeyHash = toDecoded.slice(2); // Remove prefix
+  
+  // Add output to recipient
+  psbt.addOutput({
+    script: bitcoin.script.compile([
+      bitcoin.opcodes.OP_DUP,
+      bitcoin.opcodes.OP_HASH160,
+      toPubKeyHash,
+      bitcoin.opcodes.OP_EQUALVERIFY,
+      bitcoin.opcodes.OP_CHECKSIG,
+    ]),
+    value: amountSats,
+  });
+  
+  // Add change output if significant
+  if (change > 10000) { // Only if change is more than 0.0001 ZEC
+    const fromDecoded = bs58check.decode(fromAddress);
+    const fromPubKeyHash = fromDecoded.slice(2);
+    
+    psbt.addOutput({
+      script: bitcoin.script.compile([
+        bitcoin.opcodes.OP_DUP,
+        bitcoin.opcodes.OP_HASH160,
+        fromPubKeyHash,
+        bitcoin.opcodes.OP_EQUALVERIFY,
+        bitcoin.opcodes.OP_CHECKSIG,
+      ]),
+      value: change,
+    });
+  }
+  
+  // Sign all inputs
+  for (let i = 0; i < selectedUTXOs.length; i++) {
+    psbt.signInput(i, keyPair);
+  }
+  
+  // Finalize and extract
+  psbt.finalizeAllInputs();
+  const rawTx = psbt.extractTransaction();
+  const rawTxHex = rawTx.toHex();
+  
+  console.log('[sendZcashManual] Transaction built, broadcasting...');
+  
+  // Broadcast
+  const result = await broadcastRawTransaction(rawTxHex);
+  
+  console.log('[sendZcashManual] Success!', result);
+  
+  return result;
+}
+
+/**
  * Build, sign and broadcast a Zcash transaction
  */
 export async function sendZcash(userId, toAddress, amountSats) {
@@ -316,5 +427,6 @@ export async function sendZcash(userId, toAddress, amountSats) {
 
 export default {
   sendZcash,
+  sendZcashManual,
   getAddressFromUserId
 };
