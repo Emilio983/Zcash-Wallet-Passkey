@@ -4,6 +4,8 @@ import { pool } from '../models/db.js';
 import { getLatestBlock, submitTransaction, getTransaction, getAddressBalance } from '../services/bridge-client.js';
 import { generateWalletAddresses, validateTAddress } from '../services/address-generator.js';
 import { exportPrivateKey, getBalance as getSimpleBalance } from '../services/zcash-simple.js';
+import { buildTransaction as buildZcashTx, broadcastTransaction, getAddressFromUserId } from '../services/zcash-tx-builder.js';
+import { sendZcash } from '../services/zcash-tx-real.js';
 
 const router = express.Router();
 
@@ -263,6 +265,68 @@ router.get('/balance/:address', async (req, res, next) => {
   } catch (error) {
     console.error('Error fetching balance:', error);
     next(error);
+  }
+});
+
+// POST /api/wallet/send-real - Send ZEC using real transaction building
+router.post('/wallet/send-real', txLimiter, async (req, res, next) => {
+  try {
+    const { userId, toAddress, amountZEC, memo } = req.body;
+
+    if (!userId || !toAddress || !amountZEC) {
+      return res.status(400).json({ error: 'Missing required fields: userId, toAddress, amountZEC' });
+    }
+
+    // Convert ZEC to satoshis
+    const amountSats = Math.floor(parseFloat(amountZEC) * 100000000);
+    
+    if (isNaN(amountSats) || amountSats <= 0) {
+      return res.status(400).json({ error: 'Invalid amount' });
+    }
+
+    if (amountSats < 1000) {
+      return res.status(400).json({ error: 'Amount too small (minimum 0.00001 ZEC)' });
+    }
+
+    console.log('[send-real] Sending ZEC:', {
+      userId: userId.substring(0, 8) + '...',
+      toAddress,
+      amountZEC,
+      amountSats
+    });
+
+    // Send the transaction using real implementation
+    const result = await sendZcash(userId, toAddress, amountSats);
+    
+    if (result.success) {
+      // Log to database
+      try {
+        await pool.query(
+          `INSERT INTO tx_log (user_id, txid, direction, amount_zats, to_addr, memo, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [userId, result.txid, 'outgoing', amountSats, toAddress, memo || null, 'confirmed']
+        );
+      } catch (dbError) {
+        console.error('[send-real] DB logging error:', dbError);
+        // Continue even if DB logging fails
+      }
+      
+      res.json({
+        success: true,
+        txid: result.txid,
+        message: 'Transaction successfully broadcast to Zcash network!',
+        explorer: `https://explorer.zcha.in/transactions/${result.txid}`
+      });
+    } else {
+      throw new Error('Transaction broadcast failed');
+    }
+    
+  } catch (error) {
+    console.error('[send-real] Error:', error);
+    res.status(500).json({ 
+      error: error.message,
+      details: 'Failed to send transaction'
+    });
   }
 });
 

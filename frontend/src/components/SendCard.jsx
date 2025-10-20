@@ -74,45 +74,40 @@ export default function SendCard({ userId, balance }) {
     setLoading(true);
 
     try {
-      // In production, this would:
-      // 1. Call WASM build_transaction() in WebWorker
-      // 2. Show progress indicator for ZK proof generation
-      // 3. Get rawTxHex
-      // 4. Submit to backend
-
-      // For MVP, we simulate transaction building
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      const rawTxHex = 'stub-tx-hex-' + Date.now();
-
-      // Submit transaction
-      const response = await fetch(`${API_BASE_URL}/tx/submit`, {
+      // Use the real transaction building endpoint
+      const response = await fetch(`${API_BASE_URL}/wallet/send-real`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId,
-          rawTxHex,
-          metadata: {
-            direction: 'outgoing',
-            amount_zats: amountZats,
-            to_addr: toAddress,
-            memo: memo || null,
-          },
+          toAddress,
+          amountZEC: amount,
+          memo: memo || null,
         }),
       });
 
       if (!response.ok) {
-        throw new Error('Transaction submission failed');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Transaction failed');
       }
 
       const result = await response.json();
 
-      setSuccess(`Transaction submitted! TxID: ${result.txid.substring(0, 16)}...`);
-
-      // Reset form
-      setToAddress('');
-      setAmount('');
-      setMemo('');
+      if (result.success) {
+        if (result.txid) {
+          setSuccess(`Transaction sent! TxID: ${result.txid}`);
+        } else {
+          // Transaction was built but not yet fully implemented
+          setSuccess(`Transaction prepared! ${result.note || result.message}`);
+        }
+        
+        // Reset form
+        setToAddress('');
+        setAmount('');
+        setMemo('');
+      } else {
+        throw new Error(result.error || 'Transaction failed');
+      }
     } catch (err) {
       setError(err.message);
     } finally {
