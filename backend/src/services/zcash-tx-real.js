@@ -44,71 +44,124 @@ function getAddressFromUserId(userId) {
 }
 
 /**
- * Fetch UTXOs for an address
+ * Fetch UTXOs for an address using multiple fallback APIs
  */
 async function fetchUTXOs(address) {
-  return new Promise((resolve, reject) => {
-    const options = {
-      hostname: 'api.blockchair.com',
-      path: `/zcash/dashboards/address/${address}?limit=100`,
-      method: 'GET',
-      headers: { 'User-Agent': 'ZcashWallet/1.0' },
-      timeout: 15000
-    };
+  // Try zcha.in explorer API first
+  try {
+    return await new Promise((resolve, reject) => {
+      const options = {
+        hostname: 'api.zcha.in',
+        path: `/v2/mainnet/accounts/${address}`,
+        method: 'GET',
+        headers: { 'User-Agent': 'ZcashWallet/1.0' },
+        timeout: 15000
+      };
 
-    const req = https.get(options, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          const addressData = json.data?.[address];
-          
-          if (addressData && addressData.utxo) {
-            // Format UTXOs for our use
-            const utxos = addressData.utxo.map(u => ({
-              txid: u.transaction_hash,
-              vout: u.index,
-              value: u.value,
-              script: u.script_hex || ''
-            }));
-            console.log(`[fetchUTXOs] Found ${utxos.length} UTXOs for ${address}`);
-            resolve(utxos);
-          } else {
-            console.log(`[fetchUTXOs] No UTXOs found for ${address}`);
-            resolve([]);
+      const req = https.get(options, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try {
+            const json = JSON.parse(data);
+            
+            if (json && json.utxos) {
+              // Format UTXOs for our use
+              const utxos = json.utxos.map(u => ({
+                txid: u.txid,
+                vout: u.vout,
+                value: u.satoshis,
+                script: u.scriptPubKey || ''
+              }));
+              console.log(`[fetchUTXOs] Found ${utxos.length} UTXOs for ${address} via zcha.in`);
+              resolve(utxos);
+            } else {
+              console.log(`[fetchUTXOs] No UTXOs found via zcha.in`);
+              resolve([]);
+            }
+          } catch (e) {
+            console.error('[fetchUTXOs] Parse error:', e.message);
+            reject(e);
           }
-        } catch (e) {
-          console.error('[fetchUTXOs] Parse error:', e.message);
-          reject(e);
-        }
+        });
+      });
+
+      req.on('error', (e) => {
+        console.error('[fetchUTXOs] Request error zcha.in:', e.message);
+        reject(e);
+      });
+      
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('Request timeout'));
       });
     });
-
-    req.on('error', (e) => {
-      console.error('[fetchUTXOs] Request error:', e.message);
-      reject(e);
-    });
+  } catch (error) {
+    console.error('[fetchUTXOs] zcha.in failed, trying zcashblockexplorer.com:', error.message);
     
-    req.on('timeout', () => {
-      req.destroy();
-      reject(new Error('Request timeout'));
+    // Fallback to zcashblockexplorer
+    return new Promise((resolve, reject) => {
+      const options = {
+        hostname: 'zcashblockexplorer.com',
+        path: `/api/addr/${address}/utxo`,
+        method: 'GET',
+        headers: { 'User-Agent': 'ZcashWallet/1.0' },
+        timeout: 15000
+      };
+
+      const req = https.get(options, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try {
+            const json = JSON.parse(data);
+            
+            if (Array.isArray(json) && json.length > 0) {
+              const utxos = json.map(u => ({
+                txid: u.txid,
+                vout: u.vout,
+                value: u.satoshis,
+                script: u.scriptPubKey || ''
+              }));
+              console.log(`[fetchUTXOs] Found ${utxos.length} UTXOs for ${address} via zcashblockexplorer`);
+              resolve(utxos);
+            } else {
+              console.log(`[fetchUTXOs] No UTXOs found for ${address}`);
+              resolve([]);
+            }
+          } catch (e) {
+            console.error('[fetchUTXOs] Parse error:', e.message);
+            resolve([]);
+          }
+        });
+      });
+
+      req.on('error', (e) => {
+        console.error('[fetchUTXOs] Request error:', e.message);
+        resolve([]);
+      });
+      
+      req.on('timeout', () => {
+        req.destroy();
+        resolve([]);
+      });
     });
-  });
+  }
 }
 
 /**
  * Broadcast raw transaction
  */
 async function broadcastRawTransaction(rawTxHex) {
+  // Try zcha.in API
   return new Promise((resolve, reject) => {
     const postData = JSON.stringify({
-      data: rawTxHex
+      rawtx: rawTxHex
     });
 
     const options = {
-      hostname: 'api.blockchair.com',
-      path: '/zcash/push/transaction',
+      hostname: 'api.zcha.in',
+      path: '/v2/mainnet/send',
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -124,13 +177,13 @@ async function broadcastRawTransaction(rawTxHex) {
           const json = JSON.parse(data);
           console.log('[broadcastRawTransaction] Response:', json);
           
-          if (json.data && json.data.transaction_hash) {
+          if (json.txid || json.hash) {
             resolve({
               success: true,
-              txid: json.data.transaction_hash
+              txid: json.txid || json.hash
             });
-          } else if (json.context && json.context.error) {
-            reject(new Error(json.context.error));
+          } else if (json.error) {
+            reject(new Error(json.error));
           } else {
             reject(new Error('Failed to broadcast transaction'));
           }
