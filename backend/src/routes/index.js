@@ -1,4 +1,5 @@
 import express from 'express';
+import crypto from 'crypto';
 import { txLimiter } from '../middleware/security.js';
 import { pool } from '../models/db.js';
 import { getLatestBlock, submitTransaction, getTransaction, getAddressBalance } from '../services/bridge-client.js';
@@ -8,6 +9,52 @@ import { buildTransaction as buildZcashTx, broadcastTransaction, getAddressFromU
 import { sendZcash } from '../services/zcash-tx-real.js';
 
 const router = express.Router();
+
+// POST /api/auth/email-login - Login with email and password
+router.post('/auth/email-login', async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Missing email or password' });
+    }
+
+    // Hash the provided password
+    const passwordHash = crypto.createHash('sha256').update(password).digest('hex');
+
+    // Find user
+    const result = await pool.query(
+      'SELECT id FROM users WHERE email = $1 AND password_hash = $2',
+      [email, passwordHash]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ success: false, error: 'Invalid credentials' });
+    }
+
+    const userId = result.rows[0].id;
+
+    // Get wallet address
+    const walletResult = await pool.query(
+      'SELECT ua FROM wallets WHERE user_id = $1',
+      [userId]
+    );
+
+    // Generate t-address
+    const addresses = generateWalletAddresses(userId);
+
+    res.json({
+      success: true,
+      userId,
+      walletAddress: addresses.tAddr,
+      ua: walletResult.rows[0]?.ua
+    });
+
+  } catch (error) {
+    console.error('[email-login] Error:', error);
+    res.status(500).json({ success: false, error: 'Login failed' });
+  }
+});
 
 // GET /api/blocks/head - Get current blockchain head
 router.get('/blocks/head', async (req, res, next) => {
