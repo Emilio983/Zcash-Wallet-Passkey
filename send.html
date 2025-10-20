@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quick Send ZEC</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            background: #000;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+        }
+        button:hover { background: #333; }
+        button:disabled { background: #999; cursor: not-allowed; }
+        .success { background: #d4edda; padding: 15px; border-radius: 4px; color: #155724; margin-top: 20px; }
+        .error { background: #f8d7da; padding: 15px; border-radius: 4px; color: #721c24; margin-top: 20px; }
+        .info { background: #d1ecf1; padding: 15px; border-radius: 4px; color: #0c5460; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Send ZEC (Direct)</h1>
+        
+        <div class="info">
+            <strong>Tu dirección:</strong> t1Y3qrYxrrTqBzMuC7gg3K27yVQPC9HuFae<br>
+            <strong>Tu User ID:</strong> fe635c47-ab11-4c20-9324-e9fd5317adc6
+        </div>
+
+        <div class="form-group">
+            <label>1. TXID de Binance (Transaction ID del depósito)</label>
+            <input type="text" id="txid" placeholder="Pega aquí el TXID de tu depósito de Binance">
+            <button onclick="fetchUTXOs()" style="margin-top: 10px;">Buscar mis fondos</button>
+        </div>
+
+        <div id="utxoResult"></div>
+
+        <div class="form-group" id="sendForm" style="display: none;">
+            <label>2. Dirección de destino (Binance)</label>
+            <input type="text" id="toAddress" placeholder="tex1...">
+            
+            <label style="margin-top: 15px;">3. Cantidad (ZEC)</label>
+            <input type="number" step="0.00000001" id="amount" placeholder="0.32">
+            
+            <button onclick="sendTransaction()" style="margin-top: 20px;">Enviar ZEC</button>
+        </div>
+
+        <div id="result"></div>
+    </div>
+
+    <script>
+        const API = 'https://zcash.socialmask.org/api';
+        const userId = 'fe635c47-ab11-4c20-9324-e9fd5317adc6';
+        const myAddress = 't1Y3qrYxrrTqBzMuC7gg3K27yVQPC9HuFae';
+        let utxos = null;
+
+        async function fetchUTXOs() {
+            const txid = document.getElementById('txid').value.trim();
+            if (!txid) {
+                alert('Pega el TXID de Binance');
+                return;
+            }
+
+            document.getElementById('result').innerHTML = '<div class="info">Buscando...</div>';
+
+            try {
+                const res = await fetch(`${API}/wallet/get-utxos-from-txid/${txid}/${myAddress}`);
+                const data = await res.json();
+
+                if (data.success && data.utxos && data.utxos.length > 0) {
+                    utxos = data.utxos;
+                    const total = utxos.reduce((sum, u) => sum + u.value, 0) / 100000000;
+                    document.getElementById('utxoResult').innerHTML = 
+                        `<div class="success">✅ Encontrados ${total.toFixed(8)} ZEC</div>`;
+                    document.getElementById('sendForm').style.display = 'block';
+                    document.getElementById('result').innerHTML = '';
+                } else {
+                    document.getElementById('result').innerHTML = 
+                        '<div class="error">No se encontraron fondos. Verifica que la transacción esté confirmada.</div>';
+                }
+            } catch (err) {
+                document.getElementById('result').innerHTML = 
+                    `<div class="error">Error: ${err.message}</div>`;
+            }
+        }
+
+        async function sendTransaction() {
+            const toAddress = document.getElementById('toAddress').value.trim();
+            const amount = document.getElementById('amount').value;
+
+            if (!toAddress || !amount || !utxos) {
+                alert('Completa todos los campos');
+                return;
+            }
+
+            document.getElementById('result').innerHTML = '<div class="info">Enviando transacción...</div>';
+
+            try {
+                const res = await fetch(`${API}/wallet/send-manual`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userId: userId,
+                        toAddress: toAddress,
+                        amountZEC: amount,
+                        utxos: utxos
+                    })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    document.getElementById('result').innerHTML = 
+                        `<div class="success">
+                            ✅ ¡Transacción enviada!<br>
+                            <strong>TXID:</strong> ${data.txid}<br>
+                            <a href="https://explorer.zcha.in/transactions/${data.txid}" target="_blank">Ver en explorador</a>
+                        </div>`;
+                    document.getElementById('sendForm').style.display = 'none';
+                    document.getElementById('txid').value = '';
+                    document.getElementById('toAddress').value = '';
+                    document.getElementById('amount').value = '';
+                } else {
+                    document.getElementById('result').innerHTML = 
+                        `<div class="error">Error: ${data.error}</div>`;
+                }
+            } catch (err) {
+                document.getElementById('result').innerHTML = 
+                    `<div class="error">Error: ${err.message}</div>`;
+            }
+        }
+    </script>
+</body>
+</html>
