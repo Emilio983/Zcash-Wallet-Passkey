@@ -79,5 +79,8 @@ async function sendTransaction() {
     }
 }
 
-window.fetchUTXOs = fetchUTXOs;
-window.sendTransaction = sendTransaction;
+// Add event listeners when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('fetchBtn').addEventListener('click', fetchUTXOs);
+    document.getElementById('sendBtn').addEventListener('click', sendTransaction);
+});

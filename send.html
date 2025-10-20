@@ -18,7 +18,7 @@
         <div class="form-group">
             <label>1. TXID de Binance (Transaction ID del depósito)</label>
             <input type="text" id="txid" placeholder="Pega aquí el TXID de tu depósito de Binance">
-            <button onclick="fetchUTXOs()" style="margin-top: 10px;">Buscar mis fondos</button>
+            <button id="fetchBtn" style="margin-top: 10px;">Buscar mis fondos</button>
         </div>
 
         <div id="utxoResult"></div>
@@ -30,7 +30,7 @@
             <label style="margin-top: 15px;">3. Cantidad (ZEC)</label>
             <input type="number" step="0.00000001" id="amount" placeholder="0.32">
             
-            <button onclick="sendTransaction()" style="margin-top: 20px;">Enviar ZEC</button>
+            <button id="sendBtn" style="margin-top: 20px;">Enviar ZEC</button>
         </div>
 
         <div id="result"></div>
