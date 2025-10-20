@@ -14,12 +14,20 @@ export default function SendCard({ userId, balance }) {
   };
 
   const validateAddress = (addr) => {
-    // Basic validation
-    return addr.startsWith('u1') || addr.startsWith('t1') || addr.startsWith('zs1');
+    // Basic validation for different address formats
+    // u1... = Unified Address
+    // t1/t3... = Transparent Address (Base58Check)
+    // tex1... = Transparent Extended Address (Bech32)
+    // zs1... = Sapling Shielded Address
+    return addr.startsWith('u1') || 
+           addr.startsWith('t1') || 
+           addr.startsWith('t3') ||
+           addr.startsWith('tex1') ||
+           addr.startsWith('zs1');
   };
 
   const isTransparentAddress = (addr) => {
-    return addr.startsWith('t1');
+    return addr.startsWith('t1') || addr.startsWith('t3') || addr.startsWith('tex1');
   };
 
   const handleSend = async (e) => {
@@ -130,7 +138,7 @@ export default function SendCard({ userId, balance }) {
               type="text"
               value={toAddress}
               onChange={(e) => setToAddress(e.target.value)}
-              placeholder="u1... or t1..."
+              placeholder="u1..., t1..., t3..., or tex1..."
               className="w-full px-3 py-2 border-2 border-black focus:outline-none focus:ring-2 focus:ring-black"
               disabled={loading}
             />
@@ -205,7 +213,7 @@ export default function SendCard({ userId, balance }) {
         <div className="mt-6 pt-4 border-t border-gray-200">
           <p className="text-xs text-gray-600">
             Transactions are fully shielded when sent to Unified or Sapling addresses.
-            Sending to transparent addresses (t1...) is not private.
+            Sending to transparent addresses (t1..., t3..., tex1...) is not private.
           </p>
         </div>
       </div>
